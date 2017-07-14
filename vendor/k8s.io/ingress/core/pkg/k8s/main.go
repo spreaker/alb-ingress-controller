@@ -94,7 +94,7 @@ func GetNodeIP(kubeClient clientset.Interface, name string) string {
 			}
 		}
 
-		if externalIP == "" && address.Type == api.NodeLegacyHostIP {
+		if externalIP == "" && address.Type == api.NodeInternalIP {
 			externalIP = address.Address
 		}
 	}
@@ -117,7 +117,7 @@ func GetPodDetails(kubeClient clientset.Interface) (*PodInfo, error) {
 	podName := os.Getenv("POD_NAME")
 	podNs := os.Getenv("POD_NAMESPACE")
 
-	if podName == "" && podNs == "" {
+	if podName == "" || podNs == "" {
 		return nil, fmt.Errorf("unable to get POD information (missing POD_NAME or POD_NAMESPACE environment variable")
 	}
 

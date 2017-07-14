@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/golang/glog"
 
@@ -37,17 +36,10 @@ import (
 func (ic *GenericController) syncSecret() {
 	glog.V(3).Infof("starting syncing of secrets")
 
-	if !ic.controllersInSync() {
-		time.Sleep(podStoreSyncedPollPeriod)
-		glog.Warningf("deferring sync till endpoints controller has synced")
-		return
-	}
-
 	var cert *ingress.SSLCert
 	var err error
 
-	keys := ic.secretTracker.List()
-	for _, k := range keys {
+	for _, k := range ic.secretTracker.List() {
 		key := k.(string)
 		cert, err = ic.getPemCertificate(key)
 		if err != nil {
@@ -65,11 +57,13 @@ func (ic *GenericController) syncSecret() {
 			}
 			glog.Infof("updating secret %v in the local store", key)
 			ic.sslCertTracker.Update(key, cert)
+			ic.reloadRequired = true
 			continue
 		}
 
 		glog.Infof("adding secret %v to the local store", key)
 		ic.sslCertTracker.Add(key, cert)
+		ic.reloadRequired = true
 	}
 }
 
@@ -94,8 +88,8 @@ func (ic *GenericController) getPemCertificate(secretName string) (*ingress.SSLC
 
 	var s *ingress.SSLCert
 	if okcert && okkey {
-		glog.V(3).Infof("found certificate and private key, configuring %v as a TLS Secret", secretName)
 		s, err = ssl.AddOrUpdateCertAndKey(nsSecName, cert, key, ca)
+		glog.V(3).Infof("found certificate and private key, configuring %v as a TLS Secret (CN: %v)", secretName, s.CN)
 	} else if ca != nil {
 		glog.V(3).Infof("found only ca.crt, configuring %v as an Certificate Authentication secret", secretName)
 		s, err = ssl.AddCertAuth(nsSecName, ca)

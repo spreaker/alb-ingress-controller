@@ -17,13 +17,8 @@ limitations under the License.
 package controller
 
 import (
-	"fmt"
-
 	"github.com/golang/glog"
-
-	api "k8s.io/client-go/pkg/api/v1"
 	extensions "k8s.io/client-go/pkg/apis/extensions/v1beta1"
-
 	"k8s.io/ingress/core/pkg/ingress/annotations/auth"
 	"k8s.io/ingress/core/pkg/ingress/annotations/authreq"
 	"k8s.io/ingress/core/pkg/ingress/annotations/authtls"
@@ -68,7 +63,7 @@ func newAnnotationExtractor(cfg extractorConfig) annotationExtractor {
 			"Proxy":                proxy.NewParser(cfg),
 			"RateLimit":            ratelimit.NewParser(),
 			"Redirect":             rewrite.NewParser(cfg),
-			"SecureUpstream":       secureupstream.NewParser(),
+			"SecureUpstream":       secureupstream.NewParser(cfg),
 			"SessionAffinity":      sessionaffinity.NewParser(),
 			"SSLPassthrough":       sslpassthrough.NewParser(),
 			"ConfigurationSnippet": snippet.NewParser(),
@@ -77,7 +72,7 @@ func newAnnotationExtractor(cfg extractorConfig) annotationExtractor {
 }
 
 func (e *annotationExtractor) Extract(ing *extensions.Ingress) map[string]interface{} {
-	anns := make(map[string]interface{}, 0)
+	anns := make(map[string]interface{})
 	for name, annotationParser := range e.annotations {
 		val, err := annotationParser.Parse(ing)
 		glog.V(5).Infof("annotation %v in Ingress %v/%v: %v", name, ing.GetNamespace(), ing.GetName(), val)
@@ -111,9 +106,13 @@ const (
 	sessionAffinity = "SessionAffinity"
 )
 
-func (e *annotationExtractor) SecureUpstream(ing *extensions.Ingress) bool {
-	val, _ := e.annotations[secureUpstream].Parse(ing)
-	return val.(bool)
+func (e *annotationExtractor) SecureUpstream(ing *extensions.Ingress) *secureupstream.Secure {
+	val, err := e.annotations[secureUpstream].Parse(ing)
+	if err != nil {
+		glog.Errorf("error parsing secure upstream: %v", err)
+	}
+	secure := val.(*secureupstream.Secure)
+	return secure
 }
 
 func (e *annotationExtractor) HealthCheck(ing *extensions.Ingress) *healthcheck.Upstream {
@@ -129,18 +128,4 @@ func (e *annotationExtractor) SSLPassthrough(ing *extensions.Ingress) bool {
 func (e *annotationExtractor) SessionAffinity(ing *extensions.Ingress) *sessionaffinity.AffinityConfig {
 	val, _ := e.annotations[sessionAffinity].Parse(ing)
 	return val.(*sessionaffinity.AffinityConfig)
-}
-
-func (e *annotationExtractor) ContainsCertificateAuth(ing *extensions.Ingress) bool {
-	val, _ := parser.GetStringAnnotation("ingress.kubernetes.io/auth-tls-secret", ing)
-	return val != ""
-}
-
-func (e *annotationExtractor) CertificateAuthSecret(ing *extensions.Ingress) (*api.Secret, error) {
-	val, _ := parser.GetStringAnnotation("ingress.kubernetes.io/auth-tls-secret", ing)
-	if val == "" {
-		return nil, fmt.Errorf("ingress rule %v/%v does not contain the auth-tls-secret annotation", ing.Namespace, ing.Name)
-	}
-
-	return e.secretResolver.GetSecret(val)
 }
