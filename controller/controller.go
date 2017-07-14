@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/coreos/alb-ingress-controller/awsutil"
-	"github.com/coreos/alb-ingress-controller/controller/alb"
 	"github.com/coreos/alb-ingress-controller/controller/config"
 	"github.com/coreos/alb-ingress-controller/log"
 	"github.com/golang/glog"
@@ -255,148 +254,16 @@ func (ac *ALBController) assembleIngresses() {
 		go func(wg *sync.WaitGroup, loadBalancer *elbv2.LoadBalancer) {
 			defer wg.Done()
 
-			log.Debugf("Fetching Tags for %s", "controller", *loadBalancer.LoadBalancerArn)
-			tags, err := awsutil.ALBsvc.DescribeTags(loadBalancer.LoadBalancerArn)
-			if err != nil {
-				glog.Fatal(err)
-			}
-
-			ingressName, ok := tags.Get("IngressName")
+			albIngress, ok := NewALBIngressFromLoadBalancer(*ac.ClusterName, loadBalancer)
 			if !ok {
-				log.Infof("The LoadBalancer %s does not have an IngressName tag, can't import", "controller", *loadBalancer.LoadBalancerName)
 				return
 			}
 
-			namespace, ok := tags.Get("Namespace")
-			if !ok {
-				log.Infof("The LoadBalancer %s does not have an Namespace tag, can't import", "controller", *loadBalancer.LoadBalancerName)
-				return
-			}
-
-			hostname, ok := tags.Get("Hostname")
-			if !ok {
-				log.Infof("The LoadBalancer %s does not have a Hostname tag, can't import", "controller", *loadBalancer.LoadBalancerName)
-				return
-			}
-
-			ingressID := namespace + "-" + ingressName
-
-			var rs *alb.ResourceRecordSet
-
-			if !ac.disableRoute53 {
-				zone, err := awsutil.Route53svc.GetZoneID(&hostname)
-				if err != nil {
-					log.Infof("Failed to resolve %s zoneID. Returned error %s", "controller", hostname, err.Error())
-					return
-				}
-
-				log.Infof("Fetching resource recordset for %s/%s %s", "controller", namespace, ingressName, hostname)
-				resourceRecordSet, err := awsutil.Route53svc.DescribeResourceRecordSets(zone.Id,
-					&hostname)
-				if err != nil {
-					log.Errorf("Failed to find %s in AWS Route53", ingressID, hostname)
-				}
-
-				rs = &alb.ResourceRecordSet{
-					IngressID: &ingressID,
-					ZoneID:    zone.Id,
-					CurrentResourceRecordSet: resourceRecordSet,
-				}
+			if i := ac.ALBIngresses.find(albIngress); i >= 0 {
+				albIngress = ac.ALBIngresses[i]
+				albIngress.LoadBalancers = append(albIngress.LoadBalancers, albIngress.LoadBalancers[0])
 			} else {
-				log.Warnf("Route53 disabled", ingressID)
-				rs = nil
-			}
-
-			lb := &alb.LoadBalancer{
-				ID:                  loadBalancer.LoadBalancerName,
-				IngressID:           &ingressID,
-				Hostname:            aws.String(hostname),
-				CurrentLoadBalancer: loadBalancer,
-				ResourceRecordSet:   rs,
-				CurrentTags:         tags,
-			}
-
-			targetGroups, err := awsutil.ALBsvc.DescribeTargetGroups(loadBalancer.LoadBalancerArn)
-			if err != nil {
-				glog.Fatal(err)
-			}
-
-			for _, targetGroup := range targetGroups {
-				tags, err := awsutil.ALBsvc.DescribeTags(targetGroup.TargetGroupArn)
-				if err != nil {
-					glog.Fatal(err)
-				}
-
-				svcName, ok := tags.Get("ServiceName")
-				if !ok {
-					log.Infof("The LoadBalancer %s does not have an Namespace tag, can't import", ingressID, *loadBalancer.LoadBalancerName)
-					return
-				}
-
-				tg := &alb.TargetGroup{
-					ID:                 targetGroup.TargetGroupName,
-					IngressID:          &ingressID,
-					SvcName:            svcName,
-					CurrentTags:        tags,
-					CurrentTargetGroup: targetGroup,
-				}
-				log.Infof("Fetching Targets for Target Group %s", ingressID, *targetGroup.TargetGroupArn)
-
-				targets, err := awsutil.ALBsvc.DescribeTargetGroupTargets(targetGroup.TargetGroupArn)
-				if err != nil {
-					glog.Fatal(err)
-				}
-				tg.CurrentTargets = targets
-				lb.TargetGroups = append(lb.TargetGroups, tg)
-			}
-
-			listeners, err := awsutil.ALBsvc.DescribeListeners(loadBalancer.LoadBalancerArn)
-			if err != nil {
-				glog.Fatal(err)
-			}
-
-			for _, listener := range listeners {
-				log.Infof("Fetching Rules for Listener %s", ingressID, *listener.ListenerArn)
-				rules, err := awsutil.ALBsvc.DescribeRules(listener.ListenerArn)
-				if err != nil {
-					glog.Fatal(err)
-				}
-
-				l := &alb.Listener{
-					CurrentListener: listener,
-					IngressID:       &ingressID,
-				}
-
-				for _, rule := range rules {
-					var svcName string
-					for _, tg := range lb.TargetGroups {
-						if *rule.Actions[0].TargetGroupArn == *tg.CurrentTargetGroup.TargetGroupArn {
-							svcName = tg.SvcName
-						}
-					}
-
-					log.Debugf("Assembling rule with svc name: %s", ingressID, svcName)
-					l.Rules = append(l.Rules, &alb.Rule{
-						IngressID:   &ingressID,
-						SvcName:     svcName,
-						CurrentRule: rule,
-					})
-				}
-
-				// Set the highest known priority to the amount of current rules plus 1
-				lb.LastRulePriority = int64(len(l.Rules)) + 1
-
-				lb.Listeners = append(lb.Listeners, l)
-			}
-
-			a := NewALBIngress(namespace, ingressName, *ac.ClusterName)
-			a.LoadBalancers = []*alb.LoadBalancer{lb}
-
-			if i := ac.ALBIngresses.find(a); i >= 0 {
-				a = ac.ALBIngresses[i]
-				a.LoadBalancers = append(a.LoadBalancers, lb)
-			} else {
-				ac.ALBIngresses = append(ac.ALBIngresses, a)
+				ac.ALBIngresses = append(ac.ALBIngresses, albIngress)
 			}
 		}(&wg, loadBalancer)
 	}
