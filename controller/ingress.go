@@ -186,7 +186,7 @@ func NewALBIngressFromIngress(ingress *extensions.Ingress, ac *ALBController) (*
 }
 
 // NewALBIngressFromLoadBalancer builds ALBIngress's based off of an elbv2.LoadBalancer
-func NewALBIngressFromLoadBalancer(clusterName string, loadBalancer *elbv2.LoadBalancer) (*ALBIngress, bool) {
+func NewALBIngressFromLoadBalancer(loadBalancer *elbv2.LoadBalancer, clusterName string) (*ALBIngress, bool) {
 	log.Debugf("Fetching Tags for %s", "controller", *loadBalancer.LoadBalancerArn)
 	tags, err := awsutil.ALBsvc.DescribeTags(loadBalancer.LoadBalancerArn)
 	if err != nil {
@@ -240,6 +240,9 @@ func NewALBIngressFromLoadBalancer(clusterName string, loadBalancer *elbv2.LoadB
 		ResourceRecordSet:   rs,
 		CurrentTags:         tags,
 	}
+
+	albIngress := NewALBIngress(namespace, ingressName, clusterName)
+	albIngress.LoadBalancers = []*alb.LoadBalancer{lb}
 
 	targetGroups, err := awsutil.ALBsvc.DescribeTargetGroups(loadBalancer.LoadBalancerArn)
 	if err != nil {
@@ -313,9 +316,6 @@ func NewALBIngressFromLoadBalancer(clusterName string, loadBalancer *elbv2.LoadB
 
 		lb.Listeners = append(lb.Listeners, l)
 	}
-
-	albIngress := NewALBIngress(namespace, ingressName, clusterName)
-	albIngress.LoadBalancers = []*alb.LoadBalancer{lb}
 
 	return albIngress, true
 }

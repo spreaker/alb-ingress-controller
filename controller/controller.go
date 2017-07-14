@@ -76,9 +76,6 @@ func (ac *ALBController) OnUpdate(ingressConfiguration ingress.Configuration) er
 		// Produce a new ALBIngress instance for every ingress found. If ALBIngress returns nil, there
 		// was an issue with the ingress (e.g. bad annotations) and should not be added to the list.
 		ALBIngress, err := NewALBIngressFromIngress(ingResource, ac)
-		if ALBIngress == nil {
-			continue
-		}
 		if err != nil {
 			ALBIngress.tainted = true
 		}
@@ -133,55 +130,6 @@ func (ac *ALBController) Reload(data []byte) ([]byte, bool, error) {
 	return []byte(""), true, nil
 }
 
-// OverrideFlags configures optional override flags for the ingress controller
-func (ac *ALBController) OverrideFlags(flags *pflag.FlagSet) {
-}
-
-// SetConfig configures a configmap for the ingress controller
-func (ac *ALBController) SetConfig(cfgMap *api.ConfigMap) {
-}
-
-// SetListers sets the configured store listers in the generic ingress controller
-func (ac *ALBController) SetListers(lister ingress.StoreLister) {
-	ac.storeLister = lister
-}
-
-// BackendDefaults returns default configurations for the backend
-func (ac *ALBController) BackendDefaults() defaults.Backend {
-	var backendDefaults defaults.Backend
-	return backendDefaults
-}
-
-// Name returns the ingress controller name
-func (ac *ALBController) Name() string {
-	return "AWS Application Load Balancer Controller"
-}
-
-// Check tests the ingress controller configuration
-func (ac *ALBController) Check(_ *http.Request) error {
-	return nil
-}
-
-// DefaultIngressClass returns thed default ingress class
-func (ac *ALBController) DefaultIngressClass() string {
-	return "alb"
-}
-
-// ConfigureFlags
-func (ac *ALBController) ConfigureFlags(pf *pflag.FlagSet) {
-	ac.ClusterName = pf.String("cluster-name", "", "The name of the cluster, used for naming AWS resources")
-}
-
-// Info returns information on the ingress contoller
-func (ac *ALBController) Info() *ingress.BackendInfo {
-	return &ingress.BackendInfo{
-		Name:       "ALB Ingress Controller",
-		Release:    "0.0.1",
-		Build:      "git-00000000",
-		Repository: "git://github.com/coreos/alb-ingress-controller",
-	}
-}
-
 // GetServiceNodePort returns the nodeport for a given Kubernetes service
 func (ac *ALBController) GetServiceNodePort(serviceKey string, backendPort int32) (*int64, error) {
 	// Verify the service (namespace/service-name) exists in Kubernetes.
@@ -232,11 +180,6 @@ func (ac *ALBController) ingressToDelete(newList ALBIngressesT) ALBIngressesT {
 	return deleteableIngress
 }
 
-func (ac *ALBController) StateHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(ac.ALBIngresses)
-}
-
 // assembleIngresses builds a list of existing ingresses from resources in AWS
 func (ac *ALBController) assembleIngresses() {
 	log.Infof("Build up list of existing ingresses", "controller")
@@ -254,7 +197,7 @@ func (ac *ALBController) assembleIngresses() {
 		go func(wg *sync.WaitGroup, loadBalancer *elbv2.LoadBalancer) {
 			defer wg.Done()
 
-			albIngress, ok := NewALBIngressFromLoadBalancer(*ac.ClusterName, loadBalancer)
+			albIngress, ok := NewALBIngressFromLoadBalancer(loadBalancer, *ac.ClusterName)
 			if !ok {
 				return
 			}
@@ -270,4 +213,60 @@ func (ac *ALBController) assembleIngresses() {
 	wg.Wait()
 
 	log.Infof("Assembled %d ingresses from existing AWS resources", "controller", len(ac.ALBIngresses))
+}
+
+// StateHandler returns the JSON state of the controller
+func (ac *ALBController) StateHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(ac.ALBIngresses)
+}
+
+// ConfigureFlags
+func (ac *ALBController) ConfigureFlags(pf *pflag.FlagSet) {
+	ac.ClusterName = pf.String("cluster-name", "", "The name of the cluster, used for naming AWS resources")
+}
+
+// OverrideFlags configures optional override flags for the ingress controller
+func (ac *ALBController) OverrideFlags(flags *pflag.FlagSet) {
+}
+
+// SetConfig configures a configmap for the ingress controller
+func (ac *ALBController) SetConfig(cfgMap *api.ConfigMap) {
+	glog.Infof("Config map %+v", cfgMap)
+}
+
+// SetListers sets the configured store listers in the generic ingress controller
+func (ac *ALBController) SetListers(lister ingress.StoreLister) {
+	ac.storeLister = lister
+}
+
+// BackendDefaults returns default configurations for the backend
+func (ac *ALBController) BackendDefaults() defaults.Backend {
+	var backendDefaults defaults.Backend
+	return backendDefaults
+}
+
+// Name returns the ingress controller name
+func (ac *ALBController) Name() string {
+	return "AWS Application Load Balancer Controller"
+}
+
+// Check tests the ingress controller configuration
+func (ac *ALBController) Check(_ *http.Request) error {
+	return nil
+}
+
+// DefaultIngressClass returns thed default ingress class
+func (ac *ALBController) DefaultIngressClass() string {
+	return "alb"
+}
+
+// Info returns information on the ingress contoller
+func (ac *ALBController) Info() *ingress.BackendInfo {
+	return &ingress.BackendInfo{
+		Name:       "ALB Ingress Controller",
+		Release:    "0.0.1",
+		Build:      "git-00000000",
+		Repository: "git://github.com/coreos/alb-ingress-controller",
+	}
 }
