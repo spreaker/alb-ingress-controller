@@ -21,11 +21,6 @@ func main() {
 	flag.Set("logtostderr", "true")
 	flag.CommandLine.Parse([]string{})
 
-	clusterName := os.Getenv("CLUSTER_NAME")
-	if clusterName == "" {
-		glog.Exit("A CLUSTER_NAME environment variable must be defined")
-	}
-
 	logLevel := os.Getenv("LOG_LEVEL")
 	log.SetLogLevel(logLevel)
 
@@ -34,20 +29,16 @@ func main() {
 	disableRoute53, _ := strconv.ParseBool(os.Getenv("DISABLE_ROUTE53"))
 
 	conf := &config.Config{
-		ClusterName:    clusterName,
+		ClusterName:    os.Getenv("CLUSTER_NAME"),
 		AWSDebug:       awsDebug,
 		DisableRoute53: disableRoute53,
-	}
-
-	if len(clusterName) > 11 {
-		glog.Exit("CLUSTER_NAME must be 11 characters or less")
 	}
 
 	port := "8080"
 	http.Handle("/metrics", promhttp.Handler())
 	go http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 
-	ac := controller.NewALBController(&aws.Config{MaxRetries: aws.Int(5)}, conf)
+	ac := controller.NewALBController(&aws.Config{MaxRetries: aws.Int(15)}, conf)
 	ic := ingresscontroller.NewIngressController(ac)
 
 	ac.IngressClass = ic.IngressClass()
@@ -56,6 +47,14 @@ func main() {
 	}
 
 	http.HandleFunc("/state", ac.StateHandler)
+
+	if *ac.ClusterName == "" {
+		glog.Exit("A cluster name must be defined")
+	}
+
+	if len(*ac.ClusterName) > 11 {
+		glog.Exit("Cluster name must be 11 characters or less")
+	}
 
 	defer func() {
 		glog.Infof("Shutting down ingress controller...")
