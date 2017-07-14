@@ -329,7 +329,7 @@ func (ac *ALBController) assembleIngresses() {
 
 				svcName, ok := tags.Get("ServiceName")
 				if !ok {
-					log.Infof("The LoadBalancer %s does not have an Namespace tag, can't import", "controller", *loadBalancer.LoadBalancerName)
+					log.Infof("The LoadBalancer %s does not have an Namespace tag, can't import", ingressID, *loadBalancer.LoadBalancerName)
 					return
 				}
 
@@ -340,7 +340,7 @@ func (ac *ALBController) assembleIngresses() {
 					CurrentTags:        tags,
 					CurrentTargetGroup: targetGroup,
 				}
-				log.Infof("Fetching Targets for Target Group %s", "controller", *targetGroup.TargetGroupArn)
+				log.Infof("Fetching Targets for Target Group %s", ingressID, *targetGroup.TargetGroupArn)
 
 				targets, err := awsutil.ALBsvc.DescribeTargetGroupTargets(targetGroup.TargetGroupArn)
 				if err != nil {
@@ -356,7 +356,7 @@ func (ac *ALBController) assembleIngresses() {
 			}
 
 			for _, listener := range listeners {
-				log.Infof("Fetching Rules for Listener %s", "controller", *listener.ListenerArn)
+				log.Infof("Fetching Rules for Listener %s", ingressID, *listener.ListenerArn)
 				rules, err := awsutil.ALBsvc.DescribeRules(listener.ListenerArn)
 				if err != nil {
 					glog.Fatal(err)
@@ -375,7 +375,7 @@ func (ac *ALBController) assembleIngresses() {
 						}
 					}
 
-					log.Debugf("Assembling rule with svc name: %s", "controller", svcName)
+					log.Debugf("Assembling rule with svc name: %s", ingressID, svcName)
 					l.Rules = append(l.Rules, &alb.Rule{
 						IngressID:   &ingressID,
 						SvcName:     svcName,
