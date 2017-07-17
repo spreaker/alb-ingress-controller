@@ -256,6 +256,32 @@ func (ac *ALBController) DefaultIngressClass() string {
 	return "alb"
 }
 
+// UpdateIngressStatus tracks the ALB hostnames in the ingresses
+func (ac *ALBController) UpdateIngressStatus(ingress *extensions.Ingress) []api.LoadBalancerIngress {
+	albIngress := NewALBIngress(ingress.ObjectMeta.Namespace, ingress.ObjectMeta.Name, *ac.ClusterName)
+
+	i := ac.ALBIngresses.find(albIngress)
+	if i < 0 {
+		log.Errorf("Unable to find ingress", *albIngress.id)
+		return nil
+	}
+
+	var hostnames []api.LoadBalancerIngress
+	for _, lb := range ac.ALBIngresses[i].LoadBalancers {
+		if lb.CurrentLoadBalancer == nil || lb.CurrentLoadBalancer.DNSName == nil {
+			continue
+		}
+		hostnames = append(hostnames, api.LoadBalancerIngress{Hostname: *lb.CurrentLoadBalancer.DNSName})
+	}
+
+	if len(hostnames) == 0 {
+		log.Errorf("No ALB hostnames for ingress", *albIngress.id)
+		return nil
+	}
+
+	return hostnames
+}
+
 // Info returns information on the ingress contoller
 func (ac *ALBController) Info() *ingress.BackendInfo {
 	return &ingress.BackendInfo{
