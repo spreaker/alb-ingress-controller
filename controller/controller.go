@@ -218,7 +218,8 @@ func (ac *ALBController) StateHandler(w http.ResponseWriter, r *http.Request) {
 
 // ConfigureFlags
 func (ac *ALBController) ConfigureFlags(pf *pflag.FlagSet) {
-	ac.ClusterName = pf.String("cluster-name", "", "The name of the cluster, used for naming AWS resources")
+	pf.StringVar(ac.ClusterName, "cluster-name", "", "The name of the cluster, used for naming AWS resources")
+	pf.BoolVar(&ac.disableRoute53, "disable-route53", false, "Disable Route 53 management")
 }
 
 // OverrideFlags configures optional override flags for the ingress controller
