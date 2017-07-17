@@ -11,7 +11,6 @@ import (
 	"github.com/coreos/alb-ingress-controller/awsutil"
 	"github.com/coreos/alb-ingress-controller/controller/config"
 	"github.com/coreos/alb-ingress-controller/log"
-	"github.com/golang/glog"
 	"github.com/spf13/pflag"
 
 	api "k8s.io/client-go/pkg/api/v1"
@@ -56,10 +55,6 @@ func NewALBController(awsconfig *aws.Config, conf *config.Config) *ALBController
 // list is synced resulting in new ingresses causing resource creation, modified ingresses having
 // resources modified (when appropriate) and ingresses missing from the new list deleted from AWS.
 func (ac *ALBController) OnUpdate(ingressConfiguration ingress.Configuration) error {
-	if ac.ALBIngresses == nil {
-		ac.assembleIngresses()
-	}
-
 	awsutil.OnUpdateCount.Add(float64(1))
 
 	log.Debugf("OnUpdate event seen by ALB ingress controller.", "controller")
@@ -180,14 +175,14 @@ func (ac *ALBController) ingressToDelete(newList ALBIngressesT) ALBIngressesT {
 	return deleteableIngress
 }
 
-// assembleIngresses builds a list of existing ingresses from resources in AWS
-func (ac *ALBController) assembleIngresses() {
+// AssembleIngresses builds a list of existing ingresses from resources in AWS
+func (ac *ALBController) AssembleIngresses() {
 	log.Infof("Build up list of existing ingresses", "controller")
 	ac.ALBIngresses = nil
 
 	loadBalancers, err := awsutil.ALBsvc.DescribeLoadBalancers(ac.ClusterName)
 	if err != nil {
-		glog.Fatal(err)
+		log.Fatalf("%s", "aws", err)
 	}
 
 	var wg sync.WaitGroup
@@ -228,11 +223,11 @@ func (ac *ALBController) ConfigureFlags(pf *pflag.FlagSet) {
 
 // OverrideFlags configures optional override flags for the ingress controller
 func (ac *ALBController) OverrideFlags(flags *pflag.FlagSet) {
+	flags.Set("update-status-on-shutdown", "false")
 }
 
 // SetConfig configures a configmap for the ingress controller
 func (ac *ALBController) SetConfig(cfgMap *api.ConfigMap) {
-	glog.Infof("Config map %+v", cfgMap)
 }
 
 // SetListers sets the configured store listers in the generic ingress controller

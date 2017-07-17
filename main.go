@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/coreos/alb-ingress-controller/controller"
@@ -49,16 +48,19 @@ func main() {
 	http.HandleFunc("/state", ac.StateHandler)
 
 	if *ac.ClusterName == "" {
-		glog.Exit("A cluster name must be defined")
+		log.Exitf("A cluster name must be defined", "controller")
 	}
 
 	if len(*ac.ClusterName) > 11 {
-		glog.Exit("Cluster name must be 11 characters or less")
+		log.Exitf("Cluster name must be 11 characters or less", "controller")
 	}
 
 	defer func() {
-		glog.Infof("Shutting down ingress controller...")
+		log.Infof("Shutting down ingress controller...", "controller")
 		ic.Stop()
 	}()
+
+	ac.AssembleIngresses()
+
 	ic.Start()
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/coreos/alb-ingress-controller/controller/config"
 	"github.com/coreos/alb-ingress-controller/controller/util"
 	"github.com/coreos/alb-ingress-controller/log"
-	"github.com/golang/glog"
 	api "k8s.io/client-go/pkg/api/v1"
 	extensions "k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
@@ -110,7 +109,7 @@ func NewALBIngressFromIngress(ingress *extensions.Ingress, ac *ALBController) (*
 			serviceKey := fmt.Sprintf("%s/%s", *newIngress.namespace, path.Backend.ServiceName)
 			port, err := ac.GetServiceNodePort(serviceKey, path.Backend.ServicePort.IntVal)
 			if err != nil {
-				glog.Infof("%s: %s", newIngress.Name(), err)
+				log.Infof("%s", *newIngress.id, newIngress.Name(), err)
 				continue
 			}
 
@@ -190,7 +189,7 @@ func NewALBIngressFromLoadBalancer(loadBalancer *elbv2.LoadBalancer, clusterName
 	log.Debugf("Fetching Tags for %s", "controller", *loadBalancer.LoadBalancerArn)
 	tags, err := awsutil.ALBsvc.DescribeTags(loadBalancer.LoadBalancerArn)
 	if err != nil {
-		glog.Fatal(err)
+		log.Fatalf("%s", "controller", err)
 	}
 
 	ingressName, ok := tags.Get("IngressName")
@@ -246,13 +245,13 @@ func NewALBIngressFromLoadBalancer(loadBalancer *elbv2.LoadBalancer, clusterName
 
 	targetGroups, err := awsutil.ALBsvc.DescribeTargetGroups(loadBalancer.LoadBalancerArn)
 	if err != nil {
-		glog.Fatal(err)
+		log.Fatalf("%s", ingressID, err)
 	}
 
 	for _, targetGroup := range targetGroups {
 		tags, err := awsutil.ALBsvc.DescribeTags(targetGroup.TargetGroupArn)
 		if err != nil {
-			glog.Fatal(err)
+			log.Fatalf("%s", ingressID, err)
 		}
 
 		svcName, ok := tags.Get("ServiceName")
@@ -272,7 +271,7 @@ func NewALBIngressFromLoadBalancer(loadBalancer *elbv2.LoadBalancer, clusterName
 
 		targets, err := awsutil.ALBsvc.DescribeTargetGroupTargets(targetGroup.TargetGroupArn)
 		if err != nil {
-			glog.Fatal(err)
+			log.Fatalf("%s", ingressID, err)
 		}
 		tg.CurrentTargets = targets
 		lb.TargetGroups = append(lb.TargetGroups, tg)
@@ -280,14 +279,14 @@ func NewALBIngressFromLoadBalancer(loadBalancer *elbv2.LoadBalancer, clusterName
 
 	listeners, err := awsutil.ALBsvc.DescribeListeners(loadBalancer.LoadBalancerArn)
 	if err != nil {
-		glog.Fatal(err)
+		log.Fatalf("%s", ingressID, err)
 	}
 
 	for _, listener := range listeners {
 		log.Infof("Fetching Rules for Listener %s", ingressID, *listener.ListenerArn)
 		rules, err := awsutil.ALBsvc.DescribeRules(listener.ListenerArn)
 		if err != nil {
-			glog.Fatal(err)
+			log.Fatalf("%s", ingressID, err)
 		}
 
 		l := &alb.Listener{

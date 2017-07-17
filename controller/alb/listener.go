@@ -6,7 +6,6 @@ import (
 	"github.com/coreos/alb-ingress-controller/awsutil"
 	"github.com/coreos/alb-ingress-controller/controller/config"
 	"github.com/coreos/alb-ingress-controller/log"
-	"github.com/golang/glog"
 )
 
 // Listener contains the relevant ID, Rules, and current/desired Listeners
@@ -139,18 +138,15 @@ func (l *Listener) create(lb *LoadBalancer) error {
 }
 
 // Modifies a listener
-// TODO: Determine if this needs to be implemented and if so, implement it.
 func (l *Listener) modify(lb *LoadBalancer) error {
 	if l.CurrentListener == nil {
-		// not a modify, a create
 		return l.create(lb)
 	}
 
-	glog.Infof("Modifying existing %s listener %s", *lb.ID, *l.CurrentListener.ListenerArn)
-	glog.Info("NOT IMPLEMENTED!!!!")
-
-	log.Infof("Completed Listener modification. ARN: %s | Port: %s | Proto: %s.",
-		*l.IngressID, *l.CurrentListener.ListenerArn, *l.CurrentListener.Port, *l.CurrentListener.Protocol)
+	log.Infof("Modifying existing %s listener %s", *l.IngressID, *lb.ID, *l.CurrentListener.ListenerArn)
+	log.Errorf("This has not been implemented. Please open a GitHub issue with the type of change you are trying to make", *l.IngressID)
+	log.Errorf("Current: %s", awsutil.Prettify(l.CurrentListener))
+	log.Errorf("Desired: %s", awsutil.Prettify(l.DesiredListener))
 	return nil
 }
 
