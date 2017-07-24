@@ -30,6 +30,7 @@ const (
 	subnetsKey         = "alb.ingress.kubernetes.io/subnets"
 	successCodesKey    = "alb.ingress.kubernetes.io/successCodes"
 	tagsKey            = "alb.ingress.kubernetes.io/tags"
+	nodeLabelsKey      = "alb.ingress.kubernetes.io/node-labels"
 )
 
 // Annotations contains all of the annotation configuration for an ingress
@@ -43,6 +44,7 @@ type Annotations struct {
 	Subnets         util.Subnets
 	SuccessCodes    *string
 	Tags            []*elbv2.Tag
+	NodeLabels      map[string]string
 	VPCID           *string
 }
 
@@ -113,6 +115,7 @@ func ParseAnnotations(annotations map[string]string) (*Annotations, error) {
 		SecurityGroups:  securitygroups,
 		SuccessCodes:    aws.String(annotations[successCodesKey]),
 		Tags:            stringToTags(annotations[tagsKey]),
+		NodeLabels:      parseLabels(annotations[nodeLabelsKey]),
 		HealthcheckPath: parseHealthcheckPath(annotations[healthcheckPathKey]),
 	}
 
@@ -239,6 +242,26 @@ func stringToTags(s string) (out []*elbv2.Tag) {
 	}
 
 	return out
+}
+
+func parseLabels(s string) (out map[string]string) {
+
+	labels := map[string]string{}
+
+	rawLabels := stringToAwsSlice(s)
+	for _, rawLabel := range rawLabels {
+		parts := strings.Split(*rawLabel, "=")
+		switch {
+		case *rawLabel == "":
+			continue
+		case len(parts) < 2:
+			glog.Infof("Unable to parse `%s` into Key=Value pair", *rawLabel)
+			continue
+		}
+		labels[parts[0]] = parts[1]
+	}
+
+	return labels
 }
 
 func parseSubnets(s string) (out util.Subnets, err error) {

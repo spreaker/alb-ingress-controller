@@ -127,7 +127,7 @@ func NewALBIngressFromIngress(ingress *extensions.Ingress, ac *ALBController) (*
 			}
 
 			// Add desired targets set to the targetGroup.
-			targetGroup.DesiredTargets = GetNodes(ac)
+			targetGroup.DesiredTargets = GetNodes(newIngress.annotations, ac)
 			lb.TargetGroups = append(lb.TargetGroups, targetGroup)
 
 			// Start with a new listener
@@ -244,11 +244,21 @@ func (a ALBIngressesT) find(b *ALBIngress) int {
 }
 
 // GetNodes returns a list of the cluster node external ids
-func GetNodes(ac *ALBController) util.AWSStringSlice {
+func GetNodes(annotations *config.Annotations, ac *ALBController) util.AWSStringSlice {
 	var result util.AWSStringSlice
 	nodes := ac.storeLister.Node.List()
 	for _, node := range nodes {
-		result = append(result, aws.String(node.(*api.Node).Spec.ExternalID))
+		valid := true
+		for labelKey, labelValue := range annotations.NodeLabels {
+			if v, _ := node.(*api.Node).Labels[labelKey]; v == labelValue {
+				continue
+			}
+			valid = false
+			break
+		}
+		if valid {
+			result = append(result, aws.String(node.(*api.Node).Spec.ExternalID))
+		}
 	}
 	sort.Sort(result)
 	return result
