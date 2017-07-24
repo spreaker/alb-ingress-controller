@@ -260,6 +260,15 @@ func newIngressController(config *Configuration) *GenericController {
 		},
 	}
 
+	nodesEventHandler := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			ic.syncQueue.Enqueue(obj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			ic.syncQueue.Enqueue(obj)
+		},
+	}
+
 	watchNs := api.NamespaceAll
 	if ic.cfg.ForceNamespaceIsolation && ic.cfg.Namespace != api.NamespaceAll {
 		watchNs = ic.cfg.Namespace
@@ -287,7 +296,7 @@ func newIngressController(config *Configuration) *GenericController {
 
 	ic.nodeLister.Store, ic.nodeController = cache.NewInformer(
 		cache.NewListWatchFromClient(ic.cfg.Client.Core().RESTClient(), "nodes", api.NamespaceAll, fields.Everything()),
-		&api.Node{}, ic.cfg.ResyncPeriod, cache.ResourceEventHandlerFuncs{})
+		&api.Node{}, ic.cfg.ResyncPeriod, nodesEventHandler)
 
 	if config.UpdateStatus {
 		ic.syncStatus = status.NewStatusSyncer(status.Config{
